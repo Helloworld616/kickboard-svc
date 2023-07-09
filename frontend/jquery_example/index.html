@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" type="text/css" href="./res/index.css">
+    <link rel="stylesheet" type="text/css" href="./res/reset.css">
+    <script src="./res/jquery-3.6.3.min.js"></script>
+    <script>
+
+      /*단위변경 (미터 -> 킬로미터)*/
+      const meterToKiltometer = (value = 0) => {
+        return (value/1000).toFixed(1)
+      }
+  
+      /*요약정보 html 생성*/
+      const makeSummary = (usageCount = 0, usageMinute = 0, usageMeter = 0, cardonReduction = 0) => {
+        const distance = meterToKiltometer(usageMeter)
+        return $(`
+            <div class="color-gray">이용건수</div>
+            <div>${usageCount}건</div>
+            <div class="color-gray">이용시간</div>
+            <div>${usageMinute}분</div>
+            <div class="color-gray">이동거리</div>
+            <div>${distance}km</div>
+            <div class="color-gray">탄소절감효과</div>
+            <div>${(cardonReduction).toFixed(1)}kg</div>
+        `)
+      }
+  
+      /*카드포인트 문구 생성*/
+      const getTotalPaymentString = (cardPay = 0, pointPay = 0) => {
+        let totalPayment = ''
+        if(cardPay !== 0 && pointPay !== 0) {
+          totalPayment = `카드 ${cardPay}원 + 포인트 ${pointPay}P`
+        } else if( cardPay !== 0 && pointPay === 0) {
+          totalPayment = `카드 ${cardPay}원`
+        } else if( cardPay === 0 && pointPay !== 0) {
+          totalPayment = `포인트 ${pointPay}P`
+        } else {
+          totalPayment = ''
+        }
+        return totalPayment
+      }
+  
+      /*상세정보 html 생성*/
+      const makeList = (list = []) => {
+        let htmlString = ''
+        list.forEach(item => {
+          const distance = meterToKiltometer(item?.use_distance)
+          const time = item?.use_time
+          const startDt = item?.use_start_dt
+          const endDt = item?.use_end_dt
+          const payDatetime = item?.pay_datetime
+          const cardPay = item?.card_pay
+          const pointPay = item?.point_pay
+          const totalPayment = getTotalPaymentString(cardPay, pointPay)
+  
+          htmlString += `
+            <div class="service-list-content">
+              <div class="service-list-header">
+                <span>${distance}km</span>
+                <span class="color-gray ml-10">${time}분</span>
+              </div>
+              <div class="service-list-body">
+                <div class="color-gray">이용시간</div>
+                <div>${startDt} ~ ${endDt}</div>
+                <div class="color-gray">결제일시</div>
+                <div>${payDatetime}</div>
+                <div class="color-gray">결제수단</div>
+                <div>${totalPayment}</div>
+              </div>
+            </div>
+            <hr />
+          `
+        })
+        return $(htmlString)
+      }
+  
+      $(document).ready(function() {
+        const USER_NO = 'ME00001'
+        const LIMIT = 5
+  
+        let _ptype = 1
+        let _nextOffset = 0
+  
+        /*화면 초기화*/
+        $('#summary').hide()
+        $('#list').hide()
+        $('#empty').hide()
+  
+        /*회원정보 가져오기*/
+        $.ajax({
+          type: "GET",
+          url: `http://localhost:8080/api/v1/user/${USER_NO}`,
+          dataType: "json",
+          success: function (result, status, xhr) {
+            console.log('회원정보 가져오기 성공');
+            console.table(result);
+            $('#userName').text(result?.name)
+          },
+          error: function (xhr, status, error) {
+            console.error('회원정보 가져오기 실패')
+          },
+        });
+  
+        /*조회기간 버튼 click 이벤트 처리*/
+        $('.tablinks').on('click', function(){
+  
+          /*선택되지 않은 버튼 on 표시 제거*/
+          $('.tablinks').each(function(index){
+            if($(this).hasClass('on')){
+              $(this).removeClass('on')
+            }
+          })
+          /*선택된 버튼 on 표시 추가*/
+          $(this).addClass('on')
+  
+          /*선택된 버튼의 ptype 으로 초기화*/
+          _ptype = $(this).data('ptype')
+          /*offset 초기화*/
+          _nextOffset = 0
+  
+          /*요약정보 가져오기*/
+          $.ajax({
+            type: "GET",
+            url: `http://localhost:8080/api/v1/user/${USER_NO}/usage/summary?ptype=${_ptype}`,
+            dataType: "json",
+            success: function (result, status, xhr) {
+              console.log('요약정보 가져오기 성공');
+              console.table(result);
+  
+              /*list 관련 element hide*/
+              $('#list').hide()
+              $('#empty').hide()
+  
+              /*요약정보 show */
+              $('#summary').html(makeSummary(result?.usage_count, result?.usage_minute, result?.usage_meter, result?.carbon_reduction))
+              $('#summary').show()
+              
+              /**
+               * usage_count에 따른 상세정보 가져오기 여부 결정 
+               * usage_count > 0 => 상세정보 호출
+               * usage_count <= 0 => 상세정보 대신 empty element 표시
+               */
+              if(result?.usage_count > 0) {
+                getUsage()
+              } else {
+                $('#empty').show()
+              }
+            },
+            error: function (xhr, status, error) {
+              console.error('요약정보 가져오기 실패')
+              $('#summary').html(makeSummary())
+            },
+          });
+  
+          /*상세정보 가져오기(최초)*/
+          const getUsage = () => {
+            $.ajax({
+              type: "GET",
+              url: `http://localhost:8080/api/v1/user/${USER_NO}/usage?ptype=${_ptype}`,
+              dataType: "json",
+              success: function (result, status, xhr) {
+                console.log('상세정보 가져오기 성공');
+                console.table(result);
+                console.table(result?.list);
+  
+                const list = result?.list
+  
+                if(list && Array.isArray(list) && list.length > 0) {
+                  $('#list').html(makeList(list))
+                  $('#list').show()
+                }
+              },
+              error: function (xhr, status, error) {
+                console.log('상세정보 가져오기 실패')
+              },
+            });
+          }
+        })
+  
+        /*화면 첫 로드시 "1주일" 탭이 선택된 상태로 설정함*/
+        $('.tablinks')[0].click()
+      });
+    </script>
+  </head>
+  <body>
+    <div>
+      <!-- Title -->
+      <div class="main-title">
+        <h1>서비스 이용내역</h1>
+        <div id="userName"></div>
+      </div>
+
+      <hr />
+
+      <!-- summary  -->
+      <div class="service-summary">
+        <div class="service-summary-tab">
+          <button data-ptype="1" class="tablinks">1주일</button>
+          <button data-ptype="2" class="tablinks">1개월</button>
+          <button data-ptype="3" class="tablinks">3개월</button>
+        </div>
+        <div class="spacer-20"></div>
+        <div id="summary" class="service-summary-detail-container"></div>
+      </div>
+
+      <hr />
+
+      <!-- Usage List -->
+      <div id="list" class="service-list-container"></div>
+
+      <!-- Empty -->
+      <div id="empty" class="service-empty">
+        <div class="service-empty-container">
+          <div class="service-empty-message">
+            조회된 정보가 없습니다.
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

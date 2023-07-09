@@ -1,0 +1,14 @@
+{
+  "configurations": [
+    {
+      "type": "java",
+      "name": "Spring Boot-TctApplication<tct>",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "mainClass": "com.lgcns.tct.TctApplication",
+      "projectName": "tct",
+      "args": "",
+      "envFile": "${workspaceFolder}/.env"
+    }
+  ]
+}
